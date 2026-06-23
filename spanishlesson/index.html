@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spanish Lessons</title>
+    <link href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        :root { --bg: #f9fafb; --sidebar: #2c3e50; --text: #333; --accent: #3498db; --success: #27ae60; --error: #e74c3c; }
+        body { margin: 0; font-family: 'Segoe UI', sans-serif; display: flex; height: 100vh; background: var(--bg); overflow: hidden; color: var(--text); }
+        
+        /* Layout */
+        .sidebar { width: 280px; background: var(--sidebar); color: white; padding: 20px; transition: all 0.3s; z-index: 1000; display: flex; flex-direction: column;}
+        .sidebar.collapsed { margin-left: -280px; }
+        .sidebar h2 { cursor: pointer; border-bottom: 1px solid #444; padding-bottom: 10px; margin-top: 0; font-size: 1.2rem; }
+        
+        .main { flex: 1; padding: 25px; overflow-y: auto; position: relative; width: 100%; box-sizing: border-box;}
+        .menu-toggle { position: absolute; top: 15px; left: 15px; z-index: 1001; background: var(--sidebar); color: white; border: none; padding: 10px; border-radius: 5px; cursor: pointer; display: none; }
+        
+        /* Elements */
+        .card { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 30px; }
+        .lesson-item { padding: 12px; margin: 5px 0; background: rgba(255,255,255,0.05); cursor: pointer; border-radius: 6px; }
+        .lesson-item:hover { background: rgba(255,255,255,0.15); }
+        .lesson-item.active { background: var(--accent); font-weight: bold; }
+        
+        .lesson-title { margin-top: 0; font-size: 2.2em; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        .lesson-body { font-size: 1.1em; line-height: 1.6; }
+        
+        /* Interactive Testing */
+        .test-row { display: flex; align-items: center; padding: 12px 0; border-bottom: 1px dashed #eee; gap: 15px; }
+        .test-q { width: 40%; font-weight: 500; font-size: 1.1em;}
+        .test-input-group { width: 60%; display: flex; align-items: center; gap: 10px; }
+        .test-input-group input { flex: 1; padding: 10px; border: 2px solid #ddd; border-radius: 5px; font-size: 1em; outline: none; }
+        .test-input-group input:focus { border-color: var(--accent); }
+        .feedback { font-size: 0.9em; min-width: 180px; }
+        .summary-box { margin-top: 15px; padding: 12px; background: #f8f9fa; border-radius: 4px; font-weight: bold; display: none; border-left: 4px solid var(--accent);}
+        
+        .btn { background: var(--accent); color: white; border: none; padding: 12px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; margin-top: 15px; font-size: 1rem;}
+        .btn:hover { background: #2980b9; }
+
+        /* Homework */
+        #hw-editor-container { height: 250px; margin-bottom: 15px; background: white; }
+        .teacher-feedback-box { background: #fffde7; border-left: 4px solid #f1c40f; padding: 15px; margin-top: 20px; border-radius: 0 4px 4px 0;}
+
+        @media (max-width: 768px) {
+            .menu-toggle { display: block; }
+            .sidebar { position: fixed; height: 100%; }
+            .main { padding-top: 60px; }
+            .test-row { flex-direction: column; align-items: flex-start; }
+            .test-q, .test-input-group { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <button class="menu-toggle" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
+
+    <nav class="sidebar" id="sidebar">
+        <h2 onclick="loadHomePage()"><i class="fas fa-home"></i> Spanish Lessons</h2>
+        <div id="lessonList" style="flex: 1; overflow-y: auto;">Loading...</div>
+    </nav>
+
+    <main class="main">
+        <div id="contentArea">
+            <div class="card">
+                <h1 id="displayTitle" class="lesson-title">Home</h1>
+                <div id="displayBody" class="lesson-body ql-editor" style="padding: 0;">Loading...</div>
+            </div>
+
+            <div id="resourceSection"></div>
+            
+            <div id="homeworkSection" class="card" style="display:none;">
+                <h2>Homework Submission</h2>
+                <input type="text" id="studentName" placeholder="Enter your full name" style="width:100%; max-width: 400px; padding:12px; margin-bottom:15px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;">
+                <div id="hw-editor-container"></div>
+                
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <button class="btn" onclick="submitHw()" id="btnSubmitHw">Submit Homework</button>
+                    <span id="hwSaveStatus" style="color: var(--success); display: none; font-weight: bold;">✅ Submitted successfully!</span>
+                </div>
+
+                <div id="teacherFeedbackDisplay" style="display: none;" class="teacher-feedback-box">
+                    <h4 style="margin-top: 0; color: #f39c12;">Teacher's Feedback:</h4>
+                    <div id="teacherFeedbackHTML" class="ql-editor" style="padding: 0;"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, collection, getDocs, getDoc, addDoc, updateDoc, doc, query, where, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+
+        // Zack's Firebase Config
+        const firebaseConfig = {
+            apiKey: "AIzaSyCb8pigxBmZtyQ-_cswL0ftb3IaXwHRXdg",
+            authDomain: "zakkster.firebaseapp.com",
+            projectId: "zakkster",
+            storageBucket: "zakkster.firebasestorage.app",
+            messagingSenderId: "6470308639",
+            appId: "1:6470308639:web:72be6bb8e9b3a99c95962a"
+        };
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        const hwQuill = new Quill('#hw-editor-container', { 
+            theme: 'snow', 
+            modules: { toolbar: [ ['bold', 'italic', 'underline'], [{ 'list': 'ordered'}, { 'list': 'bullet' }], ['clean'] ] } 
+        });
+
+        let studentUid = null;
+        let activeLessonId = null;
+        let existingHwId = null;
+
+        signInAnonymously(auth).then((user) => { 
+            studentUid = user.user.uid;
+            loadSidebar(); 
+            window.loadHomePage(); 
+        });
+
+        window.toggleSidebar = () => document.getElementById('sidebar').classList.toggle('collapsed');
+
+        async function loadSidebar() {
+            const list = document.getElementById('lessonList'); list.innerHTML = '';
+            const snap = await getDocs(query(collection(db, "lessons"), orderBy("title")));
+            snap.forEach(d => {
+                const div = document.createElement('div'); div.className = 'lesson-item'; div.innerText = d.data().title;
+                div.onclick = () => { 
+                    document.querySelectorAll('.lesson-item').forEach(el => el.classList.remove('active'));
+                    div.classList.add('active');
+                    if(window.innerWidth < 768) window.toggleSidebar(); 
+                    renderLesson(d.id, d.data()); 
+                };
+                list.appendChild(div);
+            });
+        }
+
+        window.loadHomePage = async () => {
+            document.querySelectorAll('.lesson-item').forEach(el => el.classList.remove('active'));
+            document.getElementById('displayTitle').innerText = "Home Resources";
+            document.getElementById('resourceSection').innerHTML = '';
+            document.getElementById('homeworkSection').style.display = 'none';
+            const d = await getDoc(doc(db, "pages", "home"));
+            document.getElementById('displayBody').innerHTML = d.exists() ? d.data().bodyHTML : 'Welcome to the classroom.';
+        };
+
+        function renderLesson(id, data) {
+            activeLessonId = id;
+            document.getElementById('displayTitle').innerText = data.title;
+            document.getElementById('displayBody').innerHTML = data.bodyHTML || '';
+            document.getElementById('homeworkSection').style.display = 'block';
+            
+            loadResources(id);
+            loadHomework(id);
+        }
+
+        // --- Resources & Grading Logic ---
+        async function loadResources(lessonId) {
+            const resContainer = document.getElementById('resourceSection');
+            resContainer.innerHTML = '';
+
+            const vSnap = await getDocs(query(collection(db, "vocabSets"), where("lessonId", "==", lessonId)));
+            vSnap.forEach(doc => renderTestSet(doc.id, doc.data(), 'vocab'));
+
+            const eSnap = await getDocs(query(collection(db, "exerciseSets"), where("lessonId", "==", lessonId)));
+            eSnap.forEach(doc => renderTestSet(doc.id, doc.data(), 'exercise'));
+        }
+
+        function renderTestSet(setId, data, type) {
+            if (!data.items || data.items.length === 0) return;
+            let html = `<div class="card"><h2>${data.title}</h2><div id="form-${setId}">`;
+
+            data.items.forEach((item, index) => {
+                const question = type === 'vocab' ? item.english : item.question;
+                const ans1 = type === 'vocab' ? item.spanish1 : item.answer;
+                const ans2 = type === 'vocab' ? (item.spanish2 || "") : "";
+                
+                html += `
+                <div class="test-row">
+                    <div class="test-q">${question}</div>
+                    <div class="test-input-group">
+                        <input type="text" class="student-input-${setId}" data-ans1="${ans1}" data-ans2="${ans2}" placeholder="Type Spanish here...">
+                        <span class="feedback" id="feedback-${setId}-${index}"></span>
+                    </div>
+                </div>`;
+            });
+
+            html += `<button class="btn" onclick="window.checkAnswers('${setId}')">Check Answers</button>`;
+            html += `<div id="summary-${setId}" class="summary-box"></div>`;
+            html += `</div></div>`;
+            
+            document.getElementById('resourceSection').innerHTML += html;
+        }
+
+        window.checkAnswers = (setId) => {
+            const inputs = document.querySelectorAll(`.student-input-${setId}`);
+            let correctCount = 0; let wrongCount = 0;
+            
+            inputs.forEach((input, index) => {
+                const cleanText = (text) => (text || "").toLowerCase().trim().replace(/[.,!¡?¿]/g, "");
+                const studentAns = cleanText(input.value);
+                const ans1 = cleanText(input.getAttribute('data-ans1'));
+                const ans2 = cleanText(input.getAttribute('data-ans2'));
+                const feedbackSpan = document.getElementById(`feedback-${setId}-${index}`);
+                
+                if(studentAns === "") {
+                    input.style.borderColor = "#ddd"; input.style.backgroundColor = "white"; feedbackSpan.innerHTML = ""; return;
+                }
+
+                if (studentAns === ans1 || (ans2 !== "" && studentAns === ans2)) {
+                    correctCount++;
+                    input.style.borderColor = "var(--success)";
+                    input.style.backgroundColor = "#f0fdf4";
+                    feedbackSpan.style.color = "var(--success)";
+                    feedbackSpan.innerHTML = "✅ Correct";
+                } else {
+                    wrongCount++;
+                    input.style.borderColor = "var(--error)";
+                    input.style.backgroundColor = "#fef2f2";
+                    feedbackSpan.style.color = "var(--error)";
+                    
+                    const correctDisplay = ans2 ? `${input.getAttribute('data-ans1')} or ${input.getAttribute('data-ans2')}` : input.getAttribute('data-ans1');
+                    feedbackSpan.innerHTML = `❌ <del style="color:#7f8c8d">${input.value}</del> <strong>${correctDisplay}</strong>`;
+                }
+            });
+
+            const summary = document.getElementById(`summary-${setId}`);
+            summary.style.display = 'block';
+            summary.innerHTML = `Summary: ${correctCount} Correct, ${wrongCount} Wrong.`;
+            summary.style.color = (wrongCount === 0 && correctCount > 0) ? "var(--success)" : "var(--text)";
+        };
+
+        // --- Homework Logic ---
+        async function loadHomework(lessonId) {
+            existingHwId = null;
+            hwQuill.root.innerHTML = '';
+            document.getElementById('hwSaveStatus').style.display = 'none';
+            document.getElementById('teacherFeedbackDisplay').style.display = 'none';
+
+            const q = query(collection(db, "homework"), where("lessonId", "==", lessonId), where("studentId", "==", studentUid));
+            const snap = await getDocs(q);
+            
+            if(!snap.empty) {
+                const hwDoc = snap.docs[0];
+                existingHwId = hwDoc.id;
+                const data = hwDoc.data();
+                hwQuill.root.innerHTML = data.contentHTML || '';
+                if(data.studentName) document.getElementById('studentName').value = data.studentName;
+                
+                if(data.feedbackHTML) {
+                    document.getElementById('teacherFeedbackDisplay').style.display = 'block';
+                    document.getElementById('teacherFeedbackHTML').innerHTML = data.feedbackHTML;
+                }
+            }
+        }
+
+        window.submitHw = async () => {
+            const btn = document.getElementById('btnSubmitHw');
+            btn.innerText = "Saving...";
