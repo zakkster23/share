@@ -458,7 +458,7 @@
         from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
         import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
 
-        // Updated with Zak's Firebase credentials
+        // Zak's Firebase config
         const firebaseConfig = {
             apiKey: "AIzaSyCb8pigxBmZtyQ-_cswL0ftb3IaXwHRXdg",
             authDomain: "zakkster.firebaseapp.com",
@@ -495,7 +495,11 @@
         const hintBtn = document.getElementById('btn-hint');
 
         // --- Authentication & Initialization ---
+        // We log in anonymously so Firebase rules (request.auth != null) will pass 
+        // without requiring the user to actually type a password!
         signInAnonymously(auth).then(() => {
+            console.log("Successfully logged in anonymously!");
+            
             // Listen for Categories
             const catQ = query(collection(db, "flashcard_categories"), orderBy("createdAt", "asc"));
             onSnapshot(catQ, (snapshot) => {
@@ -510,7 +514,10 @@
                 sets = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
                 renderDashboard();
             });
-        }).catch((error) => console.error("Silent login failed:", error));
+        }).catch((error) => {
+            console.error("Anonymous login failed:", error);
+            alert("Error: Firebase is blocking access. Please make sure you enabled 'Anonymous' in the Authentication tab of the Firebase Console!");
+        });
 
         // --- Navigation ---
         window.switchScreen = function(screenId) {
