@@ -90,7 +90,7 @@
     <script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, collection, getDocs, getDoc, addDoc, updateDoc, doc, query, where, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, getDocs, getDoc, addDoc, updateDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
         import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
         // Zack's Firebase Config
@@ -115,27 +115,51 @@
         let activeLessonId = null;
         let existingHwId = null;
 
+        // Initialize Authentication first
         signInAnonymously(auth).then((user) => { 
             studentUid = user.user.uid;
             loadSidebar(); 
             window.loadHomePage(); 
+        }).catch((error) => {
+            console.error("Login failed:", error);
+            document.getElementById('lessonList').innerText = "Auth Error.";
+            document.getElementById('displayBody').innerText = "Authentication failed. Error: " + error.message;
         });
 
         window.toggleSidebar = () => document.getElementById('sidebar').classList.toggle('collapsed');
 
+        // Load Sidebar (Simplified query, filtered in JS to prevent hangs)
         async function loadSidebar() {
-            const list = document.getElementById('lessonList'); list.innerHTML = '';
-            const snap = await getDocs(query(collection(db, "lessons"), orderBy("title")));
-            snap.forEach(d => {
-                const div = document.createElement('div'); div.className = 'lesson-item'; div.innerText = d.data().title;
-                div.onclick = () => { 
-                    document.querySelectorAll('.lesson-item').forEach(el => el.classList.remove('active'));
-                    div.classList.add('active');
-                    if(window.innerWidth < 768) window.toggleSidebar(); 
-                    renderLesson(d.id, d.data()); 
-                };
-                list.appendChild(div);
-            });
+            const list = document.getElementById('lessonList'); 
+            try {
+                const snap = await getDocs(collection(db, "lessons"));
+                list.innerHTML = '';
+                
+                if(snap.empty) {
+                    list.innerHTML = '<div style="padding:10px; opacity:0.6;">No lessons added yet</div>';
+                    return;
+                }
+
+                // Sort lessons alphabetically in Javascript memory
+                let lessons = snap.docs.map(d => ({id: d.id, ...d.data()}));
+                lessons.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+
+                lessons.forEach(lesson => {
+                    const div = document.createElement('div'); 
+                    div.className = 'lesson-item'; 
+                    div.innerText = lesson.title;
+                    div.onclick = () => { 
+                        document.querySelectorAll('.lesson-item').forEach(el => el.classList.remove('active'));
+                        div.classList.add('active');
+                        if(window.innerWidth < 768) window.toggleSidebar(); 
+                        renderLesson(lesson.id, lesson); 
+                    };
+                    list.appendChild(div);
+                });
+            } catch (error) {
+                console.error("Error loading sidebar:", error);
+                list.innerText = "Database Error.";
+            }
         }
 
         window.loadHomePage = async () => {
@@ -143,8 +167,13 @@
             document.getElementById('displayTitle').innerText = "Home Resources";
             document.getElementById('resourceSection').innerHTML = '';
             document.getElementById('homeworkSection').style.display = 'none';
-            const d = await getDoc(doc(db, "pages", "home"));
-            document.getElementById('displayBody').innerHTML = d.exists() ? d.data().bodyHTML : 'Welcome to the classroom.';
+            try {
+                const d = await getDoc(doc(db, "pages", "home"));
+                document.getElementById('displayBody').innerHTML = d.exists() ? d.data().bodyHTML : 'Welcome to the classroom. Use the admin panel to customize this page.';
+            } catch (error) {
+                console.error("Error loading homepage:", error);
+                document.getElementById('displayBody').innerText = "Error communicating with database: " + error.message;
+            }
         };
 
         function renderLesson(id, data) {
@@ -157,16 +186,25 @@
             loadHomework(id);
         }
 
-        // --- Resources & Grading Logic ---
         async function loadResources(lessonId) {
             const resContainer = document.getElementById('resourceSection');
-            resContainer.innerHTML = '';
-
-            const vSnap = await getDocs(query(collection(db, "vocabSets"), where("lessonId", "==", lessonId)));
-            vSnap.forEach(doc => renderTestSet(doc.id, doc.data(), 'vocab'));
-
-            const eSnap = await getDocs(query(collection(db, "exerciseSets"), where("lessonId", "==", lessonId)));
-            eSnap.forEach(doc => renderTestSet(doc.id, doc.data(), 'exercise'));
+            resContainer.innerHTML = 'Loading resources...';
+            try {
+                // Fetch all sets, filter in JS to avoid complex query hangs
+                const vSnap = await getDocs(collection(db, "vocabSets"));
+                const eSnap = await getDocs(collection(db, "exerciseSets"));
+                
+                resContainer.innerHTML = '';
+                
+                vSnap.docs.forEach(doc => {
+                    if(doc.data().lessonId === lessonId) renderTestSet(doc.id, doc.data(), 'vocab');
+                });
+                eSnap.docs.forEach(doc => {
+                    if(doc.data().lessonId === lessonId) renderTestSet(doc.id, doc.data(), 'exercise');
+                });
+            } catch (error) {
+                resContainer.innerHTML = 'Error loading resource components: ' + error.message;
+            }
         }
 
         function renderTestSet(setId, data, type) {
@@ -233,30 +271,58 @@
             summary.style.color = (wrongCount === 0 && correctCount > 0) ? "var(--success)" : "var(--text)";
         };
 
-        // --- Homework Logic ---
         async function loadHomework(lessonId) {
             existingHwId = null;
             hwQuill.root.innerHTML = '';
             document.getElementById('hwSaveStatus').style.display = 'none';
             document.getElementById('teacherFeedbackDisplay').style.display = 'none';
-
-            const q = query(collection(db, "homework"), where("lessonId", "==", lessonId), where("studentId", "==", studentUid));
-            const snap = await getDocs(q);
-            
-            if(!snap.empty) {
-                const hwDoc = snap.docs[0];
-                existingHwId = hwDoc.id;
-                const data = hwDoc.data();
-                hwQuill.root.innerHTML = data.contentHTML || '';
-                if(data.studentName) document.getElementById('studentName').value = data.studentName;
+            try {
+                // Fetch all homeworks, filter in JS
+                const snap = await getDocs(collection(db, "homework"));
+                const hwDocs = snap.docs.filter(d => d.data().lessonId === lessonId && d.data().studentId === studentUid);
                 
-                if(data.feedbackHTML) {
-                    document.getElementById('teacherFeedbackDisplay').style.display = 'block';
-                    document.getElementById('teacherFeedbackHTML').innerHTML = data.feedbackHTML;
+                if(hwDocs.length > 0) {
+                    const hwDoc = hwDocs[0];
+                    existingHwId = hwDoc.id;
+                    const data = hwDoc.data();
+                    hwQuill.root.innerHTML = data.contentHTML || '';
+                    if(data.studentName) document.getElementById('studentName').value = data.studentName;
+                    
+                    if(data.feedbackHTML) {
+                        document.getElementById('teacherFeedbackDisplay').style.display = 'block';
+                        document.getElementById('teacherFeedbackHTML').innerHTML = data.feedbackHTML;
+                    }
                 }
+            } catch (e) {
+                console.error("Homework error: ", e);
             }
         }
 
         window.submitHw = async () => {
             const btn = document.getElementById('btnSubmitHw');
+            btn.disabled = true;
             btn.innerText = "Saving...";
+            const data = {
+                lessonId: activeLessonId,
+                studentId: studentUid,
+                studentName: document.getElementById('studentName').value || "Anonymous Student",
+                contentHTML: hwQuill.root.innerHTML
+            };
+            try {
+                if (existingHwId) {
+                    await updateDoc(doc(db, "homework", existingHwId), data);
+                } else {
+                    const docRef = await addDoc(collection(db, "homework"), data);
+                    existingHwId = docRef.id;
+                }
+                document.getElementById('hwSaveStatus').style.display = 'inline';
+                setTimeout(() => { document.getElementById('hwSaveStatus').style.display = 'none'; }, 3000);
+            } catch (err) {
+                alert("Failed to submit homework: " + err.message);
+            }
+            btn.disabled = false;
+            btn.innerText = "Submit Homework";
+        };
+    </script>
+</body>
+</html>
