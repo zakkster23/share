@@ -310,6 +310,9 @@
         document.getElementById('btnNewLesson').onclick = () => {
             mode = 'lesson'; currentId = null;
             document.getElementById('editorCard').style.display = 'block';
+            document.getElementById('formTitle').innerText = "New Lesson";
+            document.getElementById('titleInputGroup').style.display = 'block';
+            document.getElementById('commentsGroup').style.display = 'block';
             document.getElementById('contentTitle').value = '';
             document.getElementById('teacherComments').value = '';
             if (isHtmlMode) btnToggleHtml.click();
