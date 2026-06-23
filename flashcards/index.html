@@ -1,0 +1,1181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cloud Flashcards</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+        :root {
+            --bg-color: #f8fafc;
+            --surface: #ffffff;
+            --border: #e2e8f0;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --success: #22c55e;
+            --success-bg: #dcfce7;
+            --danger: #ef4444;
+            --danger-bg: #fee2e2;
+            --warning: #f59e0b;
+            --warning-bg: #fffbeb;
+            --sidebar-width: 260px;
+        }
+
+        body {
+            margin: 0;
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+            transition: background-color 0.4s ease;
+        }
+
+        /* --- Global UI Elements --- */
+        .btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 12px 20px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn:hover { background: var(--primary-hover); transform: translateY(-1px); }
+        .btn:active { transform: translateY(1px); }
+        .btn-outline { background: transparent; border: 2px solid var(--primary); color: var(--primary); }
+        .btn-outline:hover { background: var(--primary); color: white; }
+        .btn-danger { background: var(--danger); }
+        .btn-danger:hover { background: #dc2626; }
+        .btn-success { background: var(--success); }
+        .btn-success:hover { background: #16a34a; }
+        
+        .btn-icon { padding: 8px; border-radius: 6px; background: transparent; color: var(--text-muted); cursor: pointer; border: none; transition: 0.2s; }
+        .btn-icon:hover { background: #f1f5f9; color: var(--text-main); }
+        .btn-icon.star-btn:hover { color: var(--warning); }
+        .btn-icon.star-btn.active { color: var(--warning); }
+
+        .input-field, .select-field {
+            width: 100%;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            font-size: 1rem;
+            font-family: 'Inter', sans-serif;
+            box-sizing: border-box;
+            outline: none;
+            transition: border-color 0.2s;
+            background: white;
+            color: var(--text-main);
+        }
+        .input-field:focus, .select-field:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
+
+        /* --- Screens --- */
+        .screen { display: none; width: 100%; height: 100%; flex-direction: column; overflow: hidden; }
+        .screen.active { display: flex; }
+
+        /* --- Top Navigation --- */
+        .navbar {
+            background: var(--surface);
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            flex-shrink: 0;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .nav-title { font-size: 1.25rem; font-weight: 700; color: var(--primary); margin: 0; display: flex; align-items: center; gap: 10px; }
+
+        /* --- Dashboard Layout (Sidebar + Main) --- */
+        .dashboard-wrapper { display: flex; flex: 1; overflow: hidden; }
+        
+        .sidebar-categories {
+            width: var(--sidebar-width);
+            background: var(--surface);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+        }
+
+        .sidebar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--border);
+            font-weight: 700;
+            color: var(--text-main);
+        }
+
+        .categories-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .cat-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            color: var(--text-main);
+            font-weight: 500;
+            transition: background 0.2s;
+        }
+
+        .cat-item:hover { background: #f1f5f9; }
+        .cat-item.active { background: var(--primary); color: white; }
+        .cat-item.active .btn-icon { color: white; }
+        .cat-item.active .btn-icon:hover { background: rgba(255,255,255,0.2); }
+        .cat-actions { display: flex; gap: 2px; }
+
+        .dashboard-main {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background: var(--bg-color);
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-wrapper { flex-direction: column; }
+            .sidebar-categories { width: 100%; border-right: none; border-bottom: 1px solid var(--border); max-height: 200px; }
+        }
+
+        /* --- Set Cards --- */
+        .sets-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+        }
+
+        .set-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s, background-color 0.2s;
+        }
+        .set-card.starred {
+            border: 2px solid var(--warning);
+            background-color: var(--warning-bg);
+        }
+
+        .set-card:hover { transform: translateY(-3px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+        
+        .set-card-top { display: flex; justify-content: space-between; align-items: flex-start; }
+        .set-card-header { display: flex; align-items: center; gap: 8px; flex: 1; }
+        .set-title { font-size: 1.2rem; font-weight: 700; margin: 0; color: var(--text-main); word-break: break-word; }
+        
+        .set-card-actions { display: flex; gap: 2px; flex-wrap: wrap; justify-content: flex-end; }
+        
+        .badge-recent {
+            background: #fef08a;
+            color: #854d0e;
+            font-size: 0.75rem;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            align-self: flex-start;
+            border: 1px solid #fde047;
+            margin-bottom: 5px;
+        }
+
+        .set-category-select {
+            padding: 6px 10px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            font-size: 0.85rem;
+            background: white;
+            color: var(--text-muted);
+            width: 100%;
+            margin-top: 5px;
+            cursor: pointer;
+        }
+
+        /* --- Manage Set Screen --- */
+        .manage-container { max-width: 800px; margin: 0 auto; padding: 20px; width: 100%; box-sizing: border-box; overflow-y: auto;}
+        .manage-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;}
+        .word-form {
+            background: var(--surface); padding: 20px; border-radius: 12px; border: 1px solid var(--border);
+            display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;
+        }
+        .word-form .full-width { grid-column: span 2; }
+        
+        .word-list { display: flex; flex-direction: column; gap: 10px; }
+        .word-item {
+            background: var(--surface); padding: 15px; border-radius: 8px; border: 1px solid var(--border);
+            display: flex; justify-content: space-between; align-items: center; gap: 15px;
+        }
+        .word-details { flex: 1; }
+        .word-q { font-weight: 700; font-size: 1.1rem; color: var(--primary); }
+        .word-a { font-size: 0.95rem; color: var(--text-muted); margin-top: 4px; }
+        .word-actions { display: flex; gap: 8px; }
+
+        @media (max-width: 600px) {
+            .word-form { grid-template-columns: 1fr; }
+            .word-form .full-width { grid-column: span 1; }
+        }
+
+        /* --- Play Screen --- */
+        #play-screen { background-color: var(--bg-color); transition: background-color 0.2s ease; overflow-y: auto; }
+        .play-header { display: flex; flex-direction: column; padding: 15px 20px; flex-shrink: 0; }
+        .play-top-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .play-set-name { font-weight: 600; color: var(--text-muted); }
+        .play-stats { font-weight: 700; color: var(--primary); }
+        
+        .progress-bar-container { width: 100%; height: 8px; background: rgba(0,0,0,0.1); border-radius: 4px; overflow: hidden; }
+        .progress-bar-fill { height: 100%; background: var(--primary); width: 0%; transition: width 0.4s ease; }
+
+        .card-container {
+            flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center;
+            padding: 20px; max-width: 600px; margin: 0 auto; width: 100%; box-sizing: border-box;
+        }
+
+        .flashcard {
+            background: var(--surface); width: 100%; border-radius: 16px; padding: 40px 20px;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1); text-align: center; border: 1px solid var(--border);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            min-height: 250px; transition: all 0.2s; position: relative;
+        }
+
+        .q-note { font-size: 1rem; color: var(--warning); font-weight: 600; margin-bottom: 15px; min-height: 1.2rem; text-transform: uppercase; letter-spacing: 1px;}
+        .question-text { font-size: 2.5rem; font-weight: 800; color: var(--text-main); margin-bottom: 20px; line-height: 1.2; word-break: break-word; }
+        #play-user-input { font-size: 1.2rem; font-weight: 500; opacity: 0.9; display: none; margin-bottom: 20px; }
+
+        .answer-area { width: 100%; max-width: 400px; margin-top: 20px; }
+        #answer-input {
+            width: 100%; font-size: 1.5rem; padding: 15px; text-align: center; border: 2px solid var(--border);
+            border-radius: 12px; outline: none; transition: all 0.2s; color: var(--text-main); font-weight: 600;
+        }
+        #answer-input:focus { border-color: var(--primary); box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15); }
+        
+        .play-controls { width: 100%; max-width: 400px; display: flex; gap: 10px; margin-top: 20px; }
+        .main-action-btn { flex: 1; padding: 18px; font-size: 1.2rem; }
+
+        /* --- Full Screen Feedback States --- */
+        #play-screen.bg-green { background-color: var(--success); }
+        #play-screen.bg-red { background-color: var(--danger); }
+        
+        #play-screen.bg-green .play-set-name, #play-screen.bg-red .play-set-name,
+        #play-screen.bg-green .play-stats, #play-screen.bg-red .play-stats,
+        #play-screen.bg-green .btn-icon, #play-screen.bg-red .btn-icon {
+            color: rgba(255,255,255,0.9);
+        }
+        
+        #play-screen.bg-green .flashcard, #play-screen.bg-red .flashcard {
+            background: transparent; border: none; box-shadow: none; color: white;
+        }
+        
+        #play-screen.bg-green .question-text, #play-screen.bg-red .question-text,
+        #play-screen.bg-green .q-note, #play-screen.bg-red .q-note {
+            color: white !important;
+        }
+
+        #play-screen.bg-green .answer-area, #play-screen.bg-red .answer-area,
+        #play-screen.bg-green #btn-hint, #play-screen.bg-red #btn-hint {
+            display: none !important;
+        }
+
+        #play-screen.bg-green .main-action-btn { background: white; color: var(--success); }
+        #play-screen.bg-red .main-action-btn { background: white; color: var(--danger); }
+
+        /* --- End Screen --- */
+        .results-card { background: var(--surface); border-radius: 16px; padding: 40px; text-align: center; border: 1px solid var(--border); box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05); }
+        .score-circle { width: 120px; height: 120px; border-radius: 50%; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; font-weight: 800; margin: 0 auto 20px; }
+
+        /* --- Modals --- */
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 100; backdrop-filter: blur(2px);
+        }
+        .modal-content {
+            background: var(--surface); padding: 30px; border-radius: 16px; width: 90%; max-width: 500px;
+            box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); position: relative; max-height: 90vh; overflow-y: auto;
+        }
+        .modal-close { position: absolute; top: 20px; right: 20px; cursor: pointer; font-size: 1.5rem; color: var(--text-muted); background: none; border: none; }
+    </style>
+</head>
+<body>
+
+    <div id="dashboard-screen" class="screen active">
+        <div class="navbar">
+            <h1 class="nav-title"><i class="fa-solid fa-layer-group"></i> My Flashcards</h1>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <button class="btn btn-success" onclick="openCsvModal()"><i class="fa-solid fa-file-csv"></i> New Set from CSV</button>
+                <button class="btn" onclick="promptCreateSet()"><i class="fa-solid fa-plus"></i> New Set</button>
+            </div>
+        </div>
+        
+        <div class="dashboard-wrapper">
+            <aside class="sidebar-categories">
+                <div class="sidebar-header">
+                    Categories
+                    <button class="btn-icon" onclick="promptCreateCategory()" title="Add Category"><i class="fa-solid fa-plus"></i></button>
+                </div>
+                <div id="categories-list" class="categories-list">
+                    </div>
+            </aside>
+            
+            <main class="dashboard-main">
+                <div class="sets-grid" id="sets-container"></div>
+            </main>
+        </div>
+        
+        <input type="file" id="dashboard-csv-upload" accept=".csv" style="display: none;">
+    </div>
+
+    <div id="manage-screen" class="screen">
+        <div class="navbar">
+            <button class="btn btn-outline" onclick="goHome()"><i class="fa-solid fa-arrow-left"></i> Back</button>
+            <h1 class="nav-title" id="manage-set-title">Manage Set</h1>
+            <button class="btn btn-success" onclick="document.getElementById('csv-upload').click()"><i class="fa-solid fa-file-import"></i> Import CSV</button>
+            <input type="file" id="csv-upload" accept=".csv" style="display: none;">
+        </div>
+        <div class="manage-container">
+            
+            <div class="word-form" id="word-form">
+                <h3 class="full-width" style="margin: 0 0 10px 0; color: var(--primary);">Add New Word</h3>
+                <input type="text" id="wf-q" class="input-field full-width" placeholder="Question / English Word" required>
+                <input type="text" id="wf-a1" class="input-field" placeholder="Primary Answer / Spanish Word" required>
+                <input type="text" id="wf-a2" class="input-field" placeholder="Secondary Answer (Optional)">
+                <input type="text" id="wf-qnote" class="input-field" placeholder="Question Note (e.g., Noun/Verb)">
+                <input type="text" id="wf-anote" class="input-field" placeholder="Answer Note (e.g., Example sentence)">
+                <button class="btn full-width" onclick="saveWord()" id="wf-submit-btn">Add Word</button>
+            </div>
+
+            <div class="manage-header">
+                <h2 style="margin: 0;">Words in Set (<span id="manage-word-count">0</span>)</h2>
+            </div>
+            
+            <div class="word-list" id="words-container"></div>
+        </div>
+    </div>
+
+    <div id="play-screen" class="screen">
+        <div class="play-header">
+            <div class="play-top-row">
+                <button class="btn-icon" onclick="abortPlay()" style="font-size: 1.5rem;"><i class="fa-solid fa-xmark"></i></button>
+                <div class="play-set-name" id="play-set-title">Set Name</div>
+                <div class="play-stats"><span id="play-current-idx">1</span> / <span id="play-total">10</span></div>
+            </div>
+            <div class="progress-bar-container">
+                <div class="progress-bar-fill" id="play-progress"></div>
+            </div>
+        </div>
+
+        <div class="card-container">
+            <div class="flashcard" id="flashcard-ui">
+                <div class="q-note" id="play-qnote"></div>
+                <div class="question-text" id="play-q"></div>
+                
+                <div id="play-user-input"></div>
+                
+                <div class="answer-area" id="play-answer-area">
+                    <input type="text" id="answer-input" placeholder="Type your answer..." autocomplete="off" spellcheck="false">
+                </div>
+
+                <div class="play-controls">
+                    <button class="btn btn-outline" id="btn-hint" onclick="giveHint()"><i class="fa-solid fa-lightbulb"></i> Hint</button>
+                    <button class="btn main-action-btn" id="btn-main-action" onclick="handleMainAction()">Check Answer</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="end-screen" class="screen">
+        <div class="navbar">
+            <button class="btn btn-outline" onclick="goHome()"><i class="fa-solid fa-house"></i> Home</button>
+            <h1 class="nav-title">Session Complete</h1>
+            <div style="width: 80px;"></div>
+        </div>
+        <div class="manage-container" style="display: flex; flex-direction: column; justify-content: center; flex: 1;">
+            <div class="results-card">
+                <div class="score-circle" id="end-score">100%</div>
+                <h2 style="font-size: 2rem; margin-bottom: 10px;">Great Job!</h2>
+                <p style="font-size: 1.1rem; color: var(--text-muted); margin-bottom: 30px;">
+                    You answered <strong id="end-correct" style="color: var(--success);">0</strong> correctly out of <strong id="end-total">0</strong>.
+                </p>
+                
+                <div id="end-errors-section" style="display: none; background: var(--danger-bg); padding: 20px; border-radius: 12px; margin-bottom: 30px;">
+                    <h3 style="color: #991b1b; margin-top: 0;"><i class="fa-solid fa-triangle-exclamation"></i> Words to Review: <span id="end-error-count">0</span></h3>
+                    <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                        <button class="btn btn-danger" onclick="repeatDifficult()"><i class="fa-solid fa-rotate-right"></i> Practice Errors Now</button>
+                        <button class="btn btn-outline" style="background: white; border-color: var(--danger); color: var(--danger);" onclick="exportWrong()"><i class="fa-solid fa-download"></i> Export Errors CSV</button>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 15px; justify-content: center;">
+                    <button class="btn" onclick="retryFullDeck()"><i class="fa-solid fa-rotate-left"></i> Play Full Deck Again</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="csv-import-modal" class="modal-overlay">
+        <div class="modal-content" style="max-width: 400px; text-align: center;">
+            <button class="modal-close" onclick="closeCsvModal()"><i class="fa-solid fa-xmark"></i></button>
+            <h2 style="margin-top: 0; color: var(--primary);"><i class="fa-solid fa-file-csv"></i> Import CSV Set</h2>
+            <p style="color: var(--text-muted); margin-bottom: 20px; font-size: 0.95rem;">Enter a name for your new set, then select the file.</p>
+            <input type="text" id="csv-set-name" class="input-field" placeholder="e.g., Sapos Enfados 51-75" style="margin-bottom: 20px; text-align: center; font-weight: bold;">
+            <button class="btn btn-success" style="width: 100%;" onclick="triggerCsvSelect()">Choose File & Import</button>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+        import { getFirestore, collection, onSnapshot, doc, updateDoc, addDoc, deleteDoc, setDoc, writeBatch, getDocs, query, where, orderBy } 
+        from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
+
+        // Updated with Zak's Firebase credentials
+        const firebaseConfig = {
+            apiKey: "AIzaSyCb8pigxBmZtyQ-_cswL0ftb3IaXwHRXdg",
+            authDomain: "zakkster.firebaseapp.com",
+            projectId: "zakkster",
+            storageBucket: "zakkster.firebasestorage.app",
+            messagingSenderId: "6470308639",
+            appId: "1:6470308639:web:72be6bb8e9b3a99c95962a"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        // --- Application State ---
+        let sets = [];
+        let categories = [];
+        let activeCategoryId = 'all'; // 'all', 'uncategorized', or specific ID
+        let currentManageSetId = null;
+        let manageWordsUnsubscribe = null;
+        let currentWords = [];
+        let editingWordId = null;
+        window.pendingNewSetName = ""; 
+
+        // Gameplay State
+        let deck = [];
+        let wrongDeck = [];
+        let currentCardIdx = 0;
+        let isAnswerState = false;
+        let playingSetName = "";
+
+        // --- DOM Elements ---
+        const inputField = document.getElementById('answer-input');
+        const mainActionBtn = document.getElementById('btn-main-action');
+        const hintBtn = document.getElementById('btn-hint');
+
+        // --- Authentication & Initialization ---
+        signInAnonymously(auth).then(() => {
+            // Listen for Categories
+            const catQ = query(collection(db, "flashcard_categories"), orderBy("createdAt", "asc"));
+            onSnapshot(catQ, (snapshot) => {
+                categories = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                renderSidebar();
+                renderDashboard(); // Re-render to update selects
+            });
+
+            // Listen for Sets
+            const setsQ = query(collection(db, "flashcard_sets"), orderBy("createdAt", "desc"));
+            onSnapshot(setsQ, (snapshot) => {
+                sets = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                renderDashboard();
+            });
+        }).catch((error) => console.error("Silent login failed:", error));
+
+        // --- Navigation ---
+        window.switchScreen = function(screenId) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById(screenId).classList.add('active');
+        }
+
+        window.goHome = function() {
+            if(manageWordsUnsubscribe) manageWordsUnsubscribe();
+            switchScreen('dashboard-screen');
+            currentManageSetId = null;
+            renderDashboard(); 
+        }
+
+        // --- Categories CRUD ---
+        window.setActiveCategory = function(id) {
+            activeCategoryId = id;
+            renderSidebar();
+            renderDashboard();
+        }
+
+        window.promptCreateCategory = async function() {
+            const name = prompt("Enter a name for the new category:");
+            if (name && name.trim()) {
+                await addDoc(collection(db, "flashcard_categories"), { name: name.trim(), createdAt: Date.now() });
+            }
+        }
+
+        window.renameCategory = async function(id, oldName) {
+            event.stopPropagation();
+            const newName = prompt("Rename Category:", oldName);
+            if (newName && newName.trim() !== oldName) {
+                await updateDoc(doc(db, "flashcard_categories", id), { name: newName.trim() });
+            }
+        }
+
+        window.deleteCategory = async function(id, name) {
+            event.stopPropagation();
+            if (confirm(`Delete category "${name}"? Sets inside will become Uncategorized.`)) {
+                // Remove category ID from all sets inside it
+                const setsToUpdate = sets.filter(s => s.categoryId === id);
+                if (setsToUpdate.length > 0) {
+                    const batch = writeBatch(db);
+                    setsToUpdate.forEach(s => {
+                        batch.update(doc(db, "flashcard_sets", s.id), { categoryId: null });
+                    });
+                    await batch.commit();
+                }
+                // Delete the category itself
+                await deleteDoc(doc(db, "flashcard_categories", id));
+                if (activeCategoryId === id) setActiveCategory('all');
+            }
+        }
+
+        function renderSidebar() {
+            const list = document.getElementById('categories-list');
+            list.innerHTML = `
+                <div class="cat-item ${activeCategoryId === 'all' ? 'active' : ''}" onclick="setActiveCategory('all')">
+                    <span><i class="fa-solid fa-border-all"></i> All Sets</span>
+                </div>
+                <div class="cat-item ${activeCategoryId === 'uncategorized' ? 'active' : ''}" onclick="setActiveCategory('uncategorized')">
+                    <span><i class="fa-solid fa-box-open"></i> Uncategorized</span>
+                </div>
+                <div style="height: 1px; background: var(--border); margin: 5px 0;"></div>
+            `;
+
+            categories.forEach(cat => {
+                const item = document.createElement('div');
+                item.className = `cat-item ${activeCategoryId === cat.id ? 'active' : ''}`;
+                item.onclick = () => setActiveCategory(cat.id);
+                
+                item.innerHTML = `
+                    <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;" title="${cat.name}">${cat.name}</span>
+                    <div class="cat-actions">
+                        <button class="btn-icon" style="padding: 4px;" onclick="renameCategory('${cat.id}', '${cat.name.replace(/'/g, "\\'")}')"><i class="fa-solid fa-pen" style="font-size: 0.8rem;"></i></button>
+                        <button class="btn-icon" style="padding: 4px;" onclick="deleteCategory('${cat.id}', '${cat.name.replace(/'/g, "\\'")}')"><i class="fa-solid fa-trash" style="font-size: 0.8rem;"></i></button>
+                    </div>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        // --- Sets CRUD ---
+        window.promptCreateSet = async function() {
+            const name = prompt("Enter a name for the new Flashcard Set:");
+            if (name && name.trim()) {
+                const categoryId = (activeCategoryId !== 'all' && activeCategoryId !== 'uncategorized') ? activeCategoryId : null;
+                await addDoc(collection(db, "flashcard_sets"), { 
+                    name: name.trim(), 
+                    categoryId: categoryId,
+                    isStarred: false,
+                    createdAt: Date.now() 
+                });
+            }
+        }
+
+        window.promptCreateSetFromCSV = function() {
+            const name = prompt("Enter a name for the new Flashcard Set:");
+            if (name && name.trim()) {
+                window.pendingNewSetName = name.trim();
+                document.getElementById('dashboard-csv-upload').click();
+            }
+        }
+
+        window.renameSet = async function(id, oldName) {
+            const newName = prompt("Rename Set:", oldName);
+            if (newName && newName.trim() !== oldName) {
+                await updateDoc(doc(db, "flashcard_sets", id), { name: newName.trim() });
+            }
+        }
+
+        window.toggleStar = async function(id, currentStatus) {
+            await updateDoc(doc(db, "flashcard_sets", id), { isStarred: !currentStatus });
+        }
+
+        window.changeSetCategory = async function(setId, selectElement) {
+            const newCatId = selectElement.value === "none" ? null : selectElement.value;
+            await updateDoc(doc(db, "flashcard_sets", setId), { categoryId: newCatId });
+        }
+
+        window.deleteSet = async function(id, name) {
+            if (confirm(`Are you sure you want to permanently delete the set "${name}" AND all its words?`)) {
+                const wordsQ = query(collection(db, "flashcard_words"), where("setId", "==", id));
+                const snap = await getDocs(wordsQ);
+                
+                const chunks = [];
+                for(let i=0; i<snap.docs.length; i+=490) chunks.push(snap.docs.slice(i, i+490));
+                
+                for(const chunk of chunks) {
+                    const batch = writeBatch(db);
+                    chunk.forEach(d => batch.delete(d.ref));
+                    await batch.commit();
+                }
+
+                await deleteDoc(doc(db, "flashcard_sets", id));
+                if (localStorage.getItem('lastOpenedFlashcardSetId') === id) localStorage.removeItem('lastOpenedFlashcardSetId');
+            }
+        }
+
+        // CSV Export for a specific Set
+        window.exportSet = async function(setId, setName) {
+            const snap = await getDocs(query(collection(db, "flashcard_words"), where("setId", "==", setId)));
+            const words = snap.docs.map(d => d.data());
+
+            if (words.length === 0) {
+                alert("This set is empty! Nothing to export.");
+                return;
+            }
+
+            let csvContent = "Question,Answer1,Answer2,Question Note,Answer Note\n";
+            words.forEach(w => {
+                // Properly escape fields that might contain commas or quotes
+                const q = (w.q || '').replace(/"/g, '""');
+                const a1 = (w.a1 || '').replace(/"/g, '""');
+                const a2 = (w.a2 || '').replace(/"/g, '""');
+                const qn = (w.qNote || '').replace(/"/g, '""');
+                const an = (w.aNote || '').replace(/"/g, '""');
+                
+                const row = [q, a1, a2, qn, an].map(val => val.includes(',') || val.includes('"') ? `"${val}"` : val).join(',');
+                csvContent += row + "\n";
+            });
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            
+            link.setAttribute("href", url);
+            link.setAttribute("download", `${setName}_Export.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function renderDashboard() {
+            const container = document.getElementById('sets-container');
+            container.innerHTML = '';
+            
+            // Filter by active category
+            let displaySets = sets;
+            if (activeCategoryId !== 'all' && activeCategoryId !== 'uncategorized') {
+                displaySets = sets.filter(s => s.categoryId === activeCategoryId);
+            } else if (activeCategoryId === 'uncategorized') {
+                displaySets = sets.filter(s => !s.categoryId);
+            }
+
+            if(displaySets.length === 0) {
+                container.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding: 40px; color: var(--text-muted);">No sets found in this category.</div>`;
+                return;
+            }
+
+            const lastOpenedId = localStorage.getItem('lastOpenedFlashcardSetId');
+            
+            // Priority: Starred > Last Opened > Newest
+            displaySets.sort((a, b) => {
+                if (a.isStarred && !b.isStarred) return -1;
+                if (!a.isStarred && b.isStarred) return 1;
+                if (a.id === lastOpenedId) return -1;
+                if (b.id === lastOpenedId) return 1;
+                return b.createdAt - a.createdAt;
+            });
+
+            displaySets.forEach(set => {
+                const isLastOpened = set.id === lastOpenedId;
+                let topBadges = '';
+                if (isLastOpened) topBadges += `<div class="badge-recent"><i class="fa-solid fa-clock-rotate-left"></i> Last Opened</div>`;
+                
+                // Build category dropdown options
+                let catOptions = `<option value="none" ${!set.categoryId ? 'selected' : ''}>Uncategorized</option>`;
+                categories.forEach(cat => {
+                    catOptions += `<option value="${cat.id}" ${set.categoryId === cat.id ? 'selected' : ''}>${cat.name}</option>`;
+                });
+
+                const card = document.createElement('div');
+                card.className = `set-card ${set.isStarred ? 'starred' : ''}`;
+                
+                card.innerHTML = `
+                    ${topBadges}
+                    <div class="set-card-top">
+                        <div class="set-card-header">
+                            <button class="btn-icon star-btn ${set.isStarred ? 'active' : ''}" onclick="toggleStar('${set.id}', ${set.isStarred})">
+                                <i class="fa-solid fa-star"></i>
+                            </button>
+                            <h3 class="set-title">${set.name}</h3>
+                        </div>
+                    </div>
+                    
+                    <select class="set-category-select" onchange="changeSetCategory('${set.id}', this)" title="Move to Category">
+                        ${catOptions}
+                    </select>
+
+                    <div class="set-card-actions" style="margin-top: 5px; justify-content: flex-start; gap: 10px;">
+                        <button class="btn-icon" onclick="renameSet('${set.id}', '${set.name.replace(/'/g, "\\'")}')" title="Rename Set"><i class="fa-solid fa-pen"></i></button>
+                        <button class="btn-icon" onclick="exportSet('${set.id}', '${set.name.replace(/'/g, "\\'")}')" title="Export to CSV"><i class="fa-solid fa-download"></i></button>
+                        <button class="btn-icon" onclick="deleteSet('${set.id}', '${set.name.replace(/'/g, "\\'")}')" title="Delete Set" style="color: var(--danger);"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+
+                    <div style="display:flex; gap:10px; margin-top: auto;">
+                        <button class="btn btn-outline" style="flex: 1;" onclick="openManage('${set.id}', '${set.name.replace(/'/g, "\\'")}')"><i class="fa-solid fa-list"></i> Edit</button>
+                        <button class="btn" style="flex: 1;" onclick="initPlay('${set.id}', '${set.name.replace(/'/g, "\\'")}')"><i class="fa-solid fa-play"></i> Play</button>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        // --- Manage Set Screen (Words CRUD) ---
+        window.openManage = function(setId, setName) {
+            localStorage.setItem('lastOpenedFlashcardSetId', setId);
+            currentManageSetId = setId;
+            document.getElementById('manage-set-title').innerText = setName;
+            resetWordForm();
+            switchScreen('manage-screen');
+
+            const q = query(collection(db, "flashcard_words"), where("setId", "==", setId));
+            manageWordsUnsubscribe = onSnapshot(q, (snapshot) => {
+                let fetchedWords = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                currentWords = fetchedWords.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+                
+                document.getElementById('manage-word-count').innerText = currentWords.length;
+                renderWordList();
+            });
+        }
+
+        function renderWordList() {
+            const container = document.getElementById('words-container');
+            container.innerHTML = '';
+            
+            if(currentWords.length === 0) {
+                container.innerHTML = `<div style="text-align:center; padding: 30px; color: var(--text-muted); border: 1px dashed var(--border); border-radius: 8px;">This set is empty. Add a word above or import a CSV.</div>`;
+                return;
+            }
+
+            currentWords.forEach(word => {
+                const a2Str = word.a2 ? ` / ${word.a2}` : '';
+                const item = document.createElement('div');
+                item.className = 'word-item';
+                item.innerHTML = `
+                    <div class="word-details">
+                        <div class="word-q">${word.q} <span style="font-size:0.8rem; color:var(--text-muted); font-weight:normal;">${word.qNote ? '('+word.qNote+')' : ''}</span></div>
+                        <div class="word-a">${word.a1}${a2Str} <span style="font-size:0.8rem; font-style:italic;">${word.aNote ? '- '+word.aNote : ''}</span></div>
+                    </div>
+                    <div class="word-actions">
+                        <button class="btn-icon" onclick="editWord('${word.id}')"><i class="fa-solid fa-pen"></i></button>
+                        <button class="btn-icon" onclick="deleteWord('${word.id}')" style="color: var(--danger);"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                `;
+                container.appendChild(item);
+            });
+        }
+
+        window.saveWord = async function() {
+            const q = document.getElementById('wf-q').value.trim();
+            const a1 = document.getElementById('wf-a1').value.trim();
+            if(!q || !a1) { alert("Question and Primary Answer are required!"); return; }
+
+            const data = {
+                setId: currentManageSetId,
+                q: q,
+                a1: a1,
+                a2: document.getElementById('wf-a2').value.trim(),
+                qNote: document.getElementById('wf-qnote').value.trim(),
+                aNote: document.getElementById('wf-anote').value.trim()
+            };
+
+            const btn = document.getElementById('wf-submit-btn');
+            btn.disabled = true;
+            btn.innerText = "Saving...";
+
+            if (editingWordId) {
+                await updateDoc(doc(db, "flashcard_words", editingWordId), data);
+            } else {
+                data.createdAt = Date.now();
+                await addDoc(collection(db, "flashcard_words"), data);
+            }
+
+            resetWordForm();
+        }
+
+        window.editWord = function(id) {
+            const word = currentWords.find(w => w.id === id);
+            if(!word) return;
+            
+            document.getElementById('wf-q').value = word.q;
+            document.getElementById('wf-a1').value = word.a1;
+            document.getElementById('wf-a2').value = word.a2 || '';
+            document.getElementById('wf-qnote').value = word.qNote || '';
+            document.getElementById('wf-anote').value = word.aNote || '';
+            
+            editingWordId = id;
+            document.getElementById('wf-submit-btn').innerText = "Update Word";
+            document.getElementById('wf-submit-btn').classList.replace("btn-primary", "btn-warning");
+            document.getElementById('word-form').scrollIntoView({behavior: 'smooth'});
+        }
+
+        window.deleteWord = async function(id) {
+            if(confirm("Delete this flashcard?")) {
+                await deleteDoc(doc(db, "flashcard_words", id));
+                if(editingWordId === id) resetWordForm();
+            }
+        }
+
+        function resetWordForm() {
+            document.getElementById('wf-q').value = '';
+            document.getElementById('wf-a1').value = '';
+            document.getElementById('wf-a2').value = '';
+            document.getElementById('wf-qnote').value = '';
+            document.getElementById('wf-anote').value = '';
+            editingWordId = null;
+            const btn = document.getElementById('wf-submit-btn');
+            btn.innerText = "Add Word";
+            btn.disabled = false;
+            btn.classList.replace("btn-warning", "btn-primary");
+        }
+
+        // --- CSV Import Modal Flow ---
+        window.openCsvModal = function() {
+            document.getElementById('csv-set-name').value = '';
+            document.getElementById('csv-import-modal').style.display = 'flex';
+            setTimeout(() => document.getElementById('csv-set-name').focus(), 100);
+        }
+
+        window.closeCsvModal = function() {
+            document.getElementById('csv-import-modal').style.display = 'none';
+        }
+
+        window.triggerCsvSelect = function() {
+            const name = document.getElementById('csv-set-name').value.trim();
+            if(!name) { alert("Please enter a name for the new set first!"); return; }
+            window.pendingNewSetName = name;
+            document.getElementById('dashboard-csv-upload').click();
+            closeCsvModal();
+        }
+
+        // CSV Parser Logic for both buttons
+        async function processAndImportCSV(fileText, setId, setNameStr) {
+            const lines = fileText.split(/\r?\n/);
+            const wordsToAdd = [];
+            const baseTime = Date.now();
+            
+            for(let i = 1; i < lines.length; i++) {
+                if(lines[i].trim() === '') continue;
+                // Basic CSV split, ignoring commas inside quotes could be complex, assuming standard format as provided
+                const parts = lines[i].split(',');
+                if(parts.length >= 5) {
+                    wordsToAdd.push({
+                        setId: setId,
+                        q: parts[0].trim().replace(/^"|"$/g, ''),
+                        a1: parts[1].trim().replace(/^"|"$/g, ''),
+                        a2: parts[2].trim().replace(/^"|"$/g, ''),
+                        qNote: parts[3].trim().replace(/^"|"$/g, ''),
+                        aNote: parts[4].trim().replace(/^"|"$/g, ''),
+                        createdAt: baseTime + i 
+                    });
+                }
+            }
+
+            if(wordsToAdd.length === 0) {
+                alert("No valid rows found. Ensure CSV has exactly 5 columns with commas.");
+                return false;
+            }
+
+            if(confirm(`Ready to import ${wordsToAdd.length} words into "${setNameStr}"?`)) {
+                const chunks = [];
+                for(let i=0; i<wordsToAdd.length; i+=400) chunks.push(wordsToAdd.slice(i, i+400));
+                
+                for(const chunk of chunks) {
+                    const batch = writeBatch(db);
+                    chunk.forEach(w => {
+                        batch.set(doc(collection(db, "flashcard_words")), w);
+                    });
+                    await batch.commit();
+                }
+                alert("Import Complete!");
+                return true;
+            }
+            return false;
+        }
+
+        // Inside Manage Screen Upload
+        document.getElementById('csv-upload').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file || !currentManageSetId) return;
+            const reader = new FileReader();
+            reader.onload = async function(event) {
+                await processAndImportCSV(event.target.result, currentManageSetId, "current set");
+                e.target.value = '';
+            };
+            reader.readAsText(file);
+        });
+
+        // Dashboard Upload
+        document.getElementById('dashboard-csv-upload').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file || !window.pendingNewSetName) return;
+
+            const reader = new FileReader();
+            reader.onload = async function(event) {
+                try {
+                    const categoryId = (activeCategoryId !== 'all' && activeCategoryId !== 'uncategorized') ? activeCategoryId : null;
+                    const newSetRef = await addDoc(collection(db, "flashcard_sets"), { 
+                        name: window.pendingNewSetName, 
+                        categoryId: categoryId,
+                        isStarred: false,
+                        createdAt: Date.now() 
+                    });
+                    const success = await processAndImportCSV(event.target.result, newSetRef.id, window.pendingNewSetName);
+                    if(!success) {
+                        await deleteDoc(newSetRef); // rollback empty set creation
+                    }
+                } catch (error) {
+                    console.error("Error creating set from CSV: ", error);
+                    alert("There was an error importing the CSV. Check the console.");
+                }
+                e.target.value = ''; 
+                window.pendingNewSetName = ""; 
+            };
+            reader.readAsText(file);
+        });
+
+        // --- GAMEPLAY ENGINE ---
+        window.initPlay = async function(setId, setName) {
+            localStorage.setItem('lastOpenedFlashcardSetId', setId);
+            playingSetName = setName;
+            
+            const snap = await getDocs(query(collection(db, "flashcard_words"), where("setId", "==", setId)));
+            const fetchedWords = snap.docs.map(d => ({id: d.id, ...d.data()}));
+            
+            if(fetchedWords.length === 0) {
+                alert("This set is empty. Add some words first!");
+                return;
+            }
+
+            startSession(fetchedWords);
+        }
+
+        function startSession(cardsArray) {
+            deck = [...cardsArray].sort(() => Math.random() - 0.5);
+            wrongDeck = [];
+            currentCardIdx = 0;
+            
+            document.getElementById('play-screen').className = 'screen active';
+            document.getElementById('play-set-title').innerText = playingSetName;
+            document.getElementById('play-total').innerText = deck.length;
+            
+            switchScreen('play-screen');
+            drawCard();
+        }
+
+        window.abortPlay = function() {
+            if(confirm("Quit session? Your progress won't be saved.")) goHome();
+        }
+
+        function updateProgress() {
+            document.getElementById('play-current-idx').innerText = currentCardIdx + 1;
+            const percent = ((currentCardIdx) / deck.length) * 100;
+            document.getElementById('play-progress').style.width = `${percent}%`;
+        }
+
+        function drawCard() {
+            if(currentCardIdx >= deck.length) {
+                endSession();
+                return;
+            }
+
+            isAnswerState = false;
+            updateProgress();
+            const card = deck[currentCardIdx];
+
+            // Reset Play Screen
+            document.getElementById('play-screen').className = 'screen active';
+            document.getElementById('play-user-input').style.display = 'none';
+            
+            mainActionBtn.innerText = "Check Answer";
+            mainActionBtn.className = "btn main-action-btn";
+
+            inputField.disabled = false;
+            inputField.value = '';
+            inputField.style.color = "var(--text-main)";
+            
+            document.getElementById('play-qnote').innerText = card.qNote || '';
+            document.getElementById('play-q').innerText = card.q;
+            
+            if (window.innerWidth > 600) inputField.focus();
+        }
+
+        inputField.addEventListener('input', () => {
+            if(isAnswerState) return;
+            const card = deck[currentCardIdx];
+            const ui = inputField.value.toLowerCase();
+            const c1 = card.a1.toLowerCase();
+            const c2 = card.a2.toLowerCase();
+            
+            if (c1.startsWith(ui) || (c2 && c2.startsWith(ui))) {
+                inputField.style.color = "var(--primary)";
+            } else {
+                inputField.style.color = "var(--danger)";
+            }
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if(e.key === 'Enter' && document.getElementById('play-screen').classList.contains('active')) {
+                e.preventDefault(); 
+                handleMainAction();
+            }
+        });
+
+        window.handleMainAction = function() {
+            if (!isAnswerState) {
+                checkAnswer();
+            } else {
+                currentCardIdx++;
+                drawCard();
+            }
+        }
+
+        function checkAnswer() {
+            isAnswerState = true;
+            inputField.disabled = true;
+            
+            const card = deck[currentCardIdx];
+            const userInput = inputField.value.trim();
+            const userInputLower = userInput.toLowerCase();
+            const correct1 = card.a1.toLowerCase();
+            const correct2 = card.a2.toLowerCase();
+
+            const isCorrect = (userInputLower === correct1) || (card.a2 && userInputLower === correct2);
+            const transText = card.a1 + (card.a2 ? ` / ${card.a2}` : '');
+
+            if (isCorrect) {
+                document.getElementById('play-screen').className = 'screen active bg-green';
+                document.getElementById('play-qnote').innerText = card.aNote || 'Correct!';
+                document.getElementById('play-q').innerText = transText;
+                mainActionBtn.innerText = "Next Card";
+            } else {
+                document.getElementById('play-screen').className = 'screen active bg-red';
+                document.getElementById('play-qnote').innerText = card.aNote || 'Correct Answer:';
+                document.getElementById('play-q').innerText = transText;
+                
+                const userInputDisplay = document.getElementById('play-user-input');
+                userInputDisplay.innerHTML = `You typed: <span style="text-decoration: line-through;">${userInput || '[nothing]'}</span>`;
+                userInputDisplay.style.display = 'block';
+                
+                wrongDeck.push(card);
+                mainActionBtn.innerText = "Continue";
+            }
+            
+            mainActionBtn.focus();
+        }
+
+        window.giveHint = function() {
+            if(isAnswerState) return;
+            inputField.value = deck[currentCardIdx].a1.charAt(0);
+            inputField.dispatchEvent(new Event('input'));
+            inputField.focus();
+        }
+
+        // --- END SESSION ---
+        function endSession() {
+            document.getElementById('play-progress').style.width = `100%`;
+            switchScreen('end-screen');
+            
+            const total = deck.length;
+            const correct = total - wrongDeck.length;
+            const pct = Math.round((correct / total) * 100);
+
+            document.getElementById('end-score').innerText = `${pct}%`;
+            document.getElementById('end-correct').innerText = correct;
+            document.getElementById('end-total').innerText = total;
+
+            const errSect = document.getElementById('end-errors-section');
+            if (wrongDeck.length > 0) {
+                errSect.style.display = "block";
+                document.getElementById('end-error-count').innerText = wrongDeck.length;
+            } else {
+                errSect.style.display = "none";
+            }
+        }
+
+        window.retryFullDeck = function() {
+            startSession(deck);
+        }
+
+        window.repeatDifficult = function() {
+            const uniqueWrong = [];
+            const seen = new Set();
+            for(const w of wrongDeck) {
+                if(!seen.has(w.id)) {
+                    seen.add(w.id);
+                    uniqueWrong.push(w);
+                }
+            }
+            startSession(uniqueWrong);
+        }
+
+        window.exportWrong = function() {
+            let csvContent = "Question,Answer1,Answer2,Question Note,Answer Note\n";
+            const uniqueSet = new Map();
+            wrongDeck.forEach(item => uniqueSet.set(item.id, item));
+
+            uniqueSet.forEach(item => {
+                const row = [item.q, item.a1, item.a2, item.qNote, item.aNote].map(v => {
+                    let text = v || '';
+                    if (text.includes(',') || text.includes('"')) {
+                        text = `"${text.replace(/"/g, '""')}"`;
+                    }
+                    return text;
+                }).join(',');
+                csvContent += row + "\n";
+            });
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            
+            const date = new Date();
+            const dateStr = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+            
+            link.setAttribute("href", url);
+            link.setAttribute("download", `Errors_${playingSetName}_${dateStr}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    </script>
+</body>
+</html>
