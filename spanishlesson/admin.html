@@ -157,7 +157,7 @@
     <script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, getDoc, setDoc, query, where, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
         import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
         // Zack's Firebase Config
@@ -198,8 +198,14 @@
         let currentVocabSetId = null;
         let currentExerciseSetId = null;
 
-        // Init App
-        signInAnonymously(auth).then(() => { loadLessons(); window.openHomePageEditor(); });
+        // Init App with robust error handling
+        signInAnonymously(auth).then(() => { 
+            loadLessons(); 
+            window.openHomePageEditor(); 
+        }).catch(err => {
+            console.error(err);
+            document.getElementById('lessonList').innerText = "Auth Error. Please check Firebase settings.";
+        });
 
         // --- UI & Toggle Logic ---
         window.toggleSidebar = () => document.getElementById('sidebar').classList.toggle('collapsed');
@@ -237,15 +243,24 @@
             isHtmlMode = !isHtmlMode;
         };
 
-        // --- Core Loaders ---
+        // --- Core Loaders (Simplified) ---
         async function loadLessons() {
-            const list = document.getElementById('lessonList'); list.innerHTML = '';
-            const snap = await getDocs(query(collection(db, "lessons"), orderBy("title")));
-            snap.forEach(d => {
-                const div = document.createElement('div'); div.className = 'lesson-item'; div.innerText = d.data().title;
-                div.onclick = () => openLessonEditor(d.id, d.data());
-                list.appendChild(div);
-            });
+            const list = document.getElementById('lessonList'); 
+            try {
+                const snap = await getDocs(collection(db, "lessons"));
+                list.innerHTML = '';
+                
+                let lessons = snap.docs.map(d => ({id: d.id, ...d.data()}));
+                lessons.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+
+                lessons.forEach(lesson => {
+                    const div = document.createElement('div'); div.className = 'lesson-item'; div.innerText = lesson.title;
+                    div.onclick = () => openLessonEditor(lesson.id, lesson);
+                    list.appendChild(div);
+                });
+            } catch (err) {
+                list.innerText = "Error loading lessons: " + err.message;
+            }
         }
 
         window.openHomePageEditor = async () => {
@@ -259,4 +274,179 @@
             document.getElementById('hwTabBtn').style.display = 'none';
             document.getElementById('btnDelete').style.display = 'none';
             
-            if (
+            if (isHtmlMode) btnToggleHtml.click(); // Reset to visual mode
+            
+            try {
+                const d = await getDoc(doc(db, "pages", "home"));
+                quill.root.innerHTML = d.exists() ? d.data().bodyHTML : 'Welcome!';
+            } catch (err) {
+                alert("Could not load home page: " + err.message);
+            }
+            window.switchTab('tab-main');
+        };
+
+        function openLessonEditor(id, data) {
+            mode = 'lesson'; currentId = id;
+            document.getElementById('editorCard').style.display = 'block';
+            document.getElementById('formTitle').innerText = "Edit Lesson";
+            
+            document.getElementById('titleInputGroup').style.display = 'block';
+            document.getElementById('commentsGroup').style.display = 'block';
+            document.getElementById('contentTitle').value = data.title || '';
+            document.getElementById('teacherComments').value = data.teacherComments || '';
+            
+            document.getElementById('resTabBtn').style.display = 'block';
+            document.getElementById('hwTabBtn').style.display = 'block';
+            document.getElementById('btnDelete').style.display = 'block';
+            
+            if (isHtmlMode) btnToggleHtml.click(); // Reset to visual mode
+            quill.root.innerHTML = data.bodyHTML || '';
+            
+            window.switchTab('tab-main');
+            loadResourceSets();
+            loadHomeworkSubmissions();
+        }
+
+        document.getElementById('btnNewLesson').onclick = () => {
+            mode = 'lesson'; currentId = null;
+            document.getElementById('editorCard').style.display = 'block';
+            document.getElementById('contentTitle').value = '';
+            document.getElementById('teacherComments').value = '';
+            if (isHtmlMode) btnToggleHtml.click();
+            quill.root.innerHTML = '';
+            document.getElementById('resTabBtn').style.display = 'none';
+            document.getElementById('hwTabBtn').style.display = 'none';
+            document.getElementById('btnDelete').style.display = 'none';
+            window.switchTab('tab-main');
+        };
+
+        document.getElementById('btnSave').onclick = async () => {
+            const htmlToSave = isHtmlMode ? htmlEditor.value : quill.root.innerHTML;
+            const btn = document.getElementById('btnSave');
+            btn.innerText = "Saving...";
+
+            try {
+                if(mode === 'home') {
+                    await setDoc(doc(db, "pages", "home"), { bodyHTML: htmlToSave });
+                } else {
+                    const data = { title: document.getElementById('contentTitle').value, teacherComments: document.getElementById('teacherComments').value, bodyHTML: htmlToSave };
+                    if(currentId) await updateDoc(doc(db, "lessons", currentId), data);
+                    else { const r = await addDoc(collection(db, "lessons"), data); currentId = r.id; }
+                    
+                    document.getElementById('resTabBtn').style.display = 'block';
+                    document.getElementById('hwTabBtn').style.display = 'block';
+                    loadLessons();
+                }
+                btn.innerText = "Saved!";
+                setTimeout(() => btn.innerText = "Save Changes", 2000);
+            } catch(e) { alert("Error saving: " + e.message); btn.innerText = "Save Changes"; }
+        };
+
+        document.getElementById('btnDelete').onclick = async () => {
+            if(confirm("Delete lesson?")) { 
+                try {
+                    await deleteDoc(doc(db, "lessons", currentId)); 
+                    document.getElementById('editorCard').style.display = 'none'; 
+                    loadLessons(); 
+                } catch(e) {
+                    alert("Delete failed: " + e.message);
+                }
+            }
+        };
+
+        // --- Resources Managers ---
+        async function loadResourceSets() {
+            const vList = document.getElementById('vocabSetsList'), eList = document.getElementById('exerciseSetsList');
+            vList.innerHTML = 'Loading...'; eList.innerHTML = 'Loading...';
+            
+            try {
+                // Fetch all and filter in JS
+                const vSnap = await getDocs(collection(db, "vocabSets"));
+                vList.innerHTML = '';
+                vSnap.docs.filter(d => d.data().lessonId === currentId).forEach(d => {
+                    vList.innerHTML += `<div class="set-item"><span><strong>${d.data().title}</strong></span> 
+                    <div><button class="btn btn-small btn-blue" onclick='window.editVocab("${d.id}", ${JSON.stringify(d.data()).replace(/'/g, "&#39;")})'>Edit</button>
+                    <button class="btn btn-small btn-danger" onclick='window.delSet("vocabSets", "${d.id}")'>Del</button></div></div>`;
+                });
+                
+                const eSnap = await getDocs(collection(db, "exerciseSets"));
+                eList.innerHTML = '';
+                eSnap.docs.filter(d => d.data().lessonId === currentId).forEach(d => {
+                    eList.innerHTML += `<div class="set-item"><span><strong>${d.data().title}</strong></span> 
+                    <div><button class="btn btn-small btn-blue" onclick='window.editEx("${d.id}", ${JSON.stringify(d.data()).replace(/'/g, "&#39;")})'>Edit</button>
+                    <button class="btn btn-small btn-danger" onclick='window.delSet("exerciseSets", "${d.id}")'>Del</button></div></div>`;
+                });
+            } catch(e) {
+                alert("Error loading sets: " + e.message);
+            }
+        }
+
+        window.delSet = async (col, id) => { if(confirm("Delete set?")) { await deleteDoc(doc(db, col, id)); loadResourceSets(); } };
+
+        window.openVocabEditor = (id, data) => { currentVocabSetId = id; document.getElementById('vocabEditor').style.display = 'block'; document.getElementById('vocabSetTitle').value = data?data.title:''; document.getElementById('vBody').innerHTML=''; (data?.items||[{}]).forEach(i=>window.addVocabRow(i)); };
+        window.editVocab = window.openVocabEditor;
+        window.addVocabRow = (i={}) => { document.getElementById('vBody').insertAdjacentHTML('beforeend', `<tr class="v-row"><td><input type="text" class="v-eng" value="${i.english||''}"></td><td><input type="text" class="v-sp1" value="${i.spanish1||''}"></td><td><input type="text" class="v-sp2" value="${i.spanish2||''}"></td><td><input type="text" class="v-qn" value="${i.qNote||''}"></td><td><input type="text" class="v-an" value="${i.aNote||''}"></td><td><button class="btn btn-danger btn-small" onclick="this.closest('tr').remove()">X</button></td></tr>`); };
+        window.saveVocabSet = async () => { 
+            const items = Array.from(document.querySelectorAll('.v-row')).map(r => ({ english: r.querySelector('.v-eng').value, spanish1: r.querySelector('.v-sp1').value, spanish2: r.querySelector('.v-sp2').value, qNote: r.querySelector('.v-qn').value, aNote: r.querySelector('.v-an').value })).filter(i=>i.english!=="");
+            const data = { lessonId: currentId, title: document.getElementById('vocabSetTitle').value, items };
+            try {
+                currentVocabSetId ? await updateDoc(doc(db, "vocabSets", currentVocabSetId), data) : await addDoc(collection(db, "vocabSets"), data);
+                document.getElementById('vocabEditor').style.display = 'none'; loadResourceSets(); 
+            } catch(e) { alert("Save error: " + e.message); }
+        };
+
+        window.openExerciseEditor = (id, data) => { currentExerciseSetId = id; document.getElementById('exerciseEditor').style.display = 'block'; document.getElementById('exerciseSetTitle').value = data?data.title:''; document.getElementById('eBody').innerHTML=''; (data?.items||[{}]).forEach(i=>window.addExerciseRow(i)); };
+        window.editEx = window.openExerciseEditor;
+        window.addExerciseRow = (i={}) => { document.getElementById('eBody').insertAdjacentHTML('beforeend', `<tr class="e-row"><td><input type="text" class="e-q" value="${i.question||''}"></td><td><input type="text" class="e-a" value="${i.answer||''}"></td><td><button class="btn btn-danger btn-small" onclick="this.closest('tr').remove()">X</button></td></tr>`); };
+        window.saveExerciseSet = async () => {
+            const items = Array.from(document.querySelectorAll('.e-row')).map(r => ({ question: r.querySelector('.e-q').value, answer: r.querySelector('.e-a').value })).filter(i=>i.question!=="");
+            const data = { lessonId: currentId, title: document.getElementById('exerciseSetTitle').value, items };
+            try {
+                currentExerciseSetId ? await updateDoc(doc(db, "exerciseSets", currentExerciseSetId), data) : await addDoc(collection(db, "exerciseSets"), data);
+                document.getElementById('exerciseEditor').style.display = 'none'; loadResourceSets();
+            } catch(e) { alert("Save error: " + e.message); }
+        };
+
+        // --- Homework Grading ---
+        async function loadHomeworkSubmissions() {
+            const hwList = document.getElementById('hwList'); hwList.innerHTML = 'Loading...';
+            document.getElementById('hwGradingPanel').style.display = 'none';
+            
+            try {
+                const snap = await getDocs(collection(db, "homework"));
+                const filteredDocs = snap.docs.filter(d => d.data().lessonId === currentId);
+                
+                if(filteredDocs.length === 0) { hwList.innerHTML = "<p>No submissions yet.</p>"; return; }
+
+                hwList.innerHTML = '';
+                filteredDocs.forEach(d => {
+                    const data = d.data();
+                    const div = document.createElement('div'); div.className = 'set-item';
+                    div.innerHTML = `<span>📝 <strong>${data.studentName || 'Anonymous'}</strong></span> <button class="btn btn-small btn-blue">Grade</button>`;
+                    div.onclick = () => {
+                        activeHwId = d.id;
+                        document.getElementById('hwGradingPanel').style.display = 'block';
+                        document.getElementById('gradingStudentName').innerText = data.studentName;
+                        document.getElementById('gradingOriginalText').innerHTML = data.contentHTML;
+                        feedbackQuill.root.innerHTML = data.feedbackHTML || '';
+                    };
+                    hwList.appendChild(div);
+                });
+            } catch(e) {
+                hwList.innerHTML = "Error loading submissions: " + e.message;
+            }
+        }
+
+        document.getElementById('btnSaveFeedback').onclick = async () => {
+            if(!activeHwId) return;
+            try {
+                await updateDoc(doc(db, "homework", activeHwId), { feedbackHTML: feedbackQuill.root.innerHTML });
+                alert("Feedback sent!");
+                document.getElementById('hwGradingPanel').style.display = 'none';
+            } catch(e) {
+                alert("Error sending feedback: " + e.message);
+            }
+        };
+    </script>
+</body>
+</html>
